@@ -10,6 +10,12 @@ NC='\033[0m'
 
 echo -e "${BLUE}>>> SotoWeb Installation Starting...${NC}"
 
+# Internal Logging for Setup Script
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warn() { echo -e "\033[1;33m[WARN]\033[0m $1"; }
+log_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
+
 # 1. Dependency Check
 echo -e "Checking for required tools (git, curl)..."
 apt update -qq > /dev/null
@@ -24,12 +30,8 @@ if [[ -d "$INSTALL_PATH" ]]; then
     cd "$INSTALL_PATH" && git pull -q
 else
     echo -e "Cloning SotoWeb to $INSTALL_PATH..."
-    # Replace the URL below with your actual GitHub Repo URL after you push it
-    # For now, it might point to this local workspace's clone if you were doing it manually
-    # But for the user, it should be: git clone https://github.com/USER/REPO.git $INSTALL_PATH
-    log_warn "Please ensure you update the repo URL in setup.sh after pushing to GitHub!"
-    # Default placeholder
-    git clone https://github.com/ghasali/SotoWeb.git "$INSTALL_PATH" -q
+    # Correct public repository URL
+    git clone https://github.com/Ghasalime/sotoweb.git "$INSTALL_PATH" -q
 fi
 
 # 4. Make binary executable
