@@ -298,18 +298,21 @@ install_wordpress() {
     log_info "Downloading and configuring WordPress..."
     cd "/var/www/$domain" || exit
     
-    # Download WP
-    sudo -u www-data wp core download --allow-root
+    # Fix ownership before WP-CLI steps
+    chown -R www-data:www-data "/var/www/$domain"
+    
+    # Download WP using /tmp for cache to avoid permissions issues
+    sudo -u www-data HOME=/tmp wp core download
     
     # Create wp-config.php
-    sudo -u www-data wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --allow-root
+    sudo -u www-data HOME=/tmp wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass"
     
     # Enable per-site FastCGI Cache
     enable_cache "$domain"
 
     # Install and Activate Redis Object Cache Plugin
     log_info "Installing Redis Object Cache plugin..."
-    sudo -u www-data wp plugin install redis-cache --activate --allow-root
+    sudo -u www-data HOME=/tmp wp plugin install redis-cache --activate
     
     log_success "WordPress 'Ultra' ready for $domain!"
     echo "------------------------------------------"

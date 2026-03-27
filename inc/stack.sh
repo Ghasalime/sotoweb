@@ -123,9 +123,12 @@ install_php() {
     apt update -qq
     
     log_info "Installing PHP $version and common extensions..."
-    apt install -y -qq "php$version-fpm" "php$version-common" "php$version-mysql" "php$version-curl" "php$version-gd" "php$version-mbstring" "php$version-xml" "php$version-zip" "php$version-bcmath"
-
-    log_success "PHP $version installed."
+    apt install -y -qq "php$version-fpm" "php$version-common" "php$version-mysql" "php$version-curl" "php$version-gd" "php$version-mbstring" "php$version-xml" "php$version-zip" "php$version-bcmath" php-mysql
+    
+    log_info "Enabling PHP MySQL extensions for CLI..."
+    phpenmod -v "$version" -s cli mysqli mysqlnd
+    
+    log_success "PHP $version installed and extensions hardened."
 }
 
 install_mysql() {
@@ -160,11 +163,9 @@ tune_server() {
     fi
     
     log_info "Updating MariaDB innodb_buffer_pool_size to ${db_buffer_pool_size}M..."
-    # Usually in /etc/mysql/mariadb.conf.d/50-server.cnf
-    # We might need to add it if it doesn't exist
-    local mysql_conf="/etc/mysql/mariadb.conf.d/soto-tuning.cnf"
+    local mysql_conf="/etc/mysql/mariadb.conf.d/99-soto-tune.cnf"
     mkdir -p "$(dirname "$mysql_conf")"
-    echo -e "[mysqld]\ninnodb_buffer_pool_size = ${db_buffer_pool_size}M" > "$mysql_conf"
+    echo -e "[mysqld]\ninnodb_buffer_pool_size = ${db_buffer_pool_size}M\ninnodb_flush_method = O_DIRECT\ninnodb_file_per_table = 1" > "$mysql_conf"
     systemctl restart mariadb
 
     log_success "Server tuning applied based on available resources."
