@@ -223,6 +223,9 @@ update_soto() {
     chmod +x "$SOTO_BASE_DIR/bin/soto"
     ln -sf "$SOTO_BASE_DIR/bin/soto" /usr/local/bin/soto
     
+    # Clear update alert
+    rm -f /etc/sotoweb/.update_available
+    
     log_success "SotoWeb updated successfully!"
 }
 

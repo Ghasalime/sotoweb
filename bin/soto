@@ -21,6 +21,7 @@ show_help() {
     echo "  log      View real-time server logs"
     echo "  backup   Manage cloud backups (S3, GDrive, etc.)"
     echo "  tools    SotoWeb system tools & dashboard"
+    echo "  update   Update SotoWeb to the latest version"
     echo "  help     Display this help menu"
     echo ""
     echo "Example:"
@@ -60,6 +61,10 @@ case "$1" in
         source "$SOTO_BASE_DIR/inc/auth.sh"
         shift
         handle_auth "$@"
+        ;;
+    update|upgrade)
+        source "$SOTO_BASE_DIR/inc/tools.sh"
+        update_soto
         ;;
     help|--help|-h|"")
         show_help

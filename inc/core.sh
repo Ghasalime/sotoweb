@@ -45,6 +45,18 @@ display_banner() {
     echo " |____/ \___/ \__\___/      \_/\_/ \___|_.__/ "
     echo "   SotoWeb CLI v1.0    "
     echo -e "${NC}"
+
+    # Check for update alerts
+    if [[ -f "/etc/sotoweb/.update_available" ]]; then
+        local updates=$(cat /etc/sotoweb/.update_available)
+        if [[ "$updates" -gt 0 ]]; then
+            echo -e "${YELLOW}${BOLD}[UPDATE]${NC} $updates pembaruan tersedia! Jalankan 'sudo soto update' untuk memperbarui."
+            echo ""
+        fi
+    fi
+    
+    # Run throttled check in background
+    check_for_updates &
 }
 
 # Check for required commands
@@ -89,4 +101,28 @@ get_php_fpm_sock() {
     local version=$(get_php_version)
     local sock="/var/run/php/php$version-fpm.sock"
     echo "$sock"
+}
+# Throttled Update Check
+check_for_updates() {
+    local check_file="/etc/sotoweb/.last_update_check"
+    local alert_file="/etc/sotoweb/.update_available"
+    local now=$(date +%s)
+    
+    # Throttle: 24 hours (86400 seconds)
+    if [[ -f "$check_file" ]]; then
+        local last_check=$(cat "$check_file")
+        if (( now - last_check < 86400 )); then
+            return 0
+        fi
+    fi
+    
+    # Skip if not a git repo
+    if [[ ! -d "/etc/sotoweb/.git" ]]; then return 0; fi
+    
+    # Perform silent fetch
+    cd /etc/sotoweb && git fetch origin main --quiet &> /dev/null
+    local changes=$(git rev-list HEAD...origin/main --count)
+    
+    echo "$changes" > "$alert_file"
+    echo "$now" > "$check_file"
 }
