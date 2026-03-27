@@ -330,6 +330,15 @@ check_wp_cli() {
     fi
     # Always force permissions even if it already exists
     chmod 755 /usr/local/bin/wp
+    
+    # Proactive fix for missing extensions
+    if ! php -m | grep -q mysqli; then
+        log_info "Fixing missing PHP MySQL extension for CLI..."
+        local version=$(get_php_version)
+        if check_command phpenmod; then
+            phpenmod -v "$version" -s cli mysqli mysqlnd &> /dev/null
+        fi
+    fi
 }
 
 create_mysql_db() {
