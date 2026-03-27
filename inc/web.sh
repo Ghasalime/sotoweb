@@ -320,21 +320,32 @@ install_wordpress() {
     # Create wp-config.php (Nuclear fix for mysqli_init)
     sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --allow-root --skip-check
     
+    # NEW: Automated WordPress Core Installation (Prevents DB Connection Error)
+    local wp_admin_user="admin"
+    local wp_admin_pass=$(openssl rand -base64 12)
+    local wp_admin_email="admin@$domain"
+    
+    log_info "Initializing WordPress tables (Zero-Click)..."
+    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp core install --url="http://$domain" --title="SotoWeb Site: $domain" --admin_user="$wp_admin_user" --admin_password="$wp_admin_pass" --admin_email="$wp_admin_email" --skip-email --allow-root
+    
     # Enable per-site FastCGI Cache
     enable_cache "$domain"
     
     # Install and Activate Redis Object Cache Plugin
-    log_info "Installing Redis Object Cache plugin..."
+    log_info "Installing and configuring Redis Object Cache..."
     sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp plugin install redis-cache --activate --allow-root
+    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp redis enable --allow-root
     
     # Cleanup workspace
     rm -rf "$wp_ws"
     
     log_success "WordPress 'Ultra' ready for $domain!"
     echo "------------------------------------------"
-    echo "Access your site at: http://$domain"
-    echo "to finish the browser setup."
+    echo " Admin Panel: http://$domain/wp-admin"
+    echo " Username:    $wp_admin_user"
+    echo " Password:    $wp_admin_pass"
     echo "------------------------------------------"
+    echo "Situs sudah siap pakai dengan Redis & Cacheaktif!"
 }
 
 check_wp_cli() {
