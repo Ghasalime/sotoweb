@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SotoWeb - One-liner Installer
-# Author: Antigravity
+# Author: Ghasali
 
 # Colors
 GREEN='\033[0;32m'

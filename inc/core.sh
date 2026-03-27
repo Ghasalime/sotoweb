@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SotoWeb Core Utilities
-# Author: Antigravity
+# Author: Ghasali
 
 # Colors
 RED='\033[0;31m'

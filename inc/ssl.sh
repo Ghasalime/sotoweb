@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SotoWeb SSL Management (Certbot)
-# Author: Antigravity
+# Author: Ghasali
 
 activate_ssl() {
     local domain=$1

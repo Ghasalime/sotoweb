@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SotoWeb Cloud Backup (rclone)
-# Author: Antigravity
+# Author: Ghasali
 
 handle_backup() {
     # Check for root

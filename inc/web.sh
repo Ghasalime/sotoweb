@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SotoWeb Website Management
-# Author: Antigravity
+# Author: Ghasali
 
 handle_web() {
     # Check for root

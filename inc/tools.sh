@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SotoWeb Tools & Dashboard
-# Author: Antigravity
+# Author: Ghasali
 
 handle_tools() {
     # Check for root

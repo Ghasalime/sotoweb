@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SotoWeb Log Viewer
-# Author: Antigravity
+# Author: Ghasali
 
 handle_log() {
     # Check for root

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SotoWeb HTTP Authentication Management
-# Author: Antigravity
+# Author: Ghasali
 
 handle_auth() {
     # Check for root

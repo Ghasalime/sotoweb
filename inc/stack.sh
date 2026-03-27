@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SotoWeb Stack Management
-# Author: Antigravity
+# Author: Ghasali
 
 handle_stack() {
     # Check for root
