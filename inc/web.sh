@@ -318,7 +318,7 @@ install_wordpress() {
     sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp core download --allow-root
     
     # Create wp-config.php (Nuclear fix for mysqli_init)
-    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --allow-root --skip-check
+    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --dbhost="127.0.0.1" --allow-root --skip-check
     
     # NEW: Automated WordPress Core Installation (Prevents DB Connection Error)
     local wp_admin_user="admin"
@@ -381,9 +381,15 @@ create_mysql_db() {
     local user=$2
     local pass=$3
     
-    mariadb -e "CREATE DATABASE IF NOT EXISTS $name;"
+    # Use 127.0.0.1 to avoid IPv6/localhost ambiguity
+    mariadb -e "CREATE DATABASE IF NOT EXISTS \`$name\`;"
+    mariadb -e "CREATE USER IF NOT EXISTS '$user'@'127.0.0.1' IDENTIFIED BY '$pass';"
+    mariadb -e "GRANT ALL PRIVILEGES ON \`$name\`.* TO '$user'@'127.0.0.1';"
+    
+    # Also allow localhost as fallback
     mariadb -e "CREATE USER IF NOT EXISTS '$user'@'localhost' IDENTIFIED BY '$pass';"
-    mariadb -e "GRANT ALL PRIVILEGES ON $name.* TO '$user'@'localhost';"
+    mariadb -e "GRANT ALL PRIVILEGES ON \`$name\`.* TO '$user'@'localhost';"
+    
     mariadb -e "FLUSH PRIVILEGES;"
 }
 
