@@ -280,7 +280,7 @@ install_wordpress() {
     log_info "Creating database for $domain..."
     local db_name=$(echo "${domain//./_}" | cut -c1-64)
     local db_user=$(echo "user_${db_name}" | cut -c1-16)
-    local db_pass=$(openssl rand -base64 12)
+    local db_pass=$(openssl rand -hex 12)
 
     create_mysql_db "$db_name" "$db_user" "$db_pass"
 
@@ -322,7 +322,7 @@ install_wordpress() {
     
     # NEW: Automated WordPress Core Installation (Prevents DB Connection Error)
     local wp_admin_user="admin"
-    local wp_admin_pass=$(openssl rand -base64 12)
+    local wp_admin_pass=$(openssl rand -hex 12)
     local wp_admin_email="admin@$domain"
     
     log_info "Initializing WordPress tables (Zero-Click)..."
@@ -383,12 +383,10 @@ create_mysql_db() {
     
     # Use 127.0.0.1 to avoid IPv6/localhost ambiguity
     mariadb -e "CREATE DATABASE IF NOT EXISTS \`$name\`;"
-    mariadb -e "CREATE USER IF NOT EXISTS '$user'@'127.0.0.1' IDENTIFIED BY '$pass';"
-    mariadb -e "GRANT ALL PRIVILEGES ON \`$name\`.* TO '$user'@'127.0.0.1';"
     
-    # Also allow localhost as fallback
-    mariadb -e "CREATE USER IF NOT EXISTS '$user'@'localhost' IDENTIFIED BY '$pass';"
-    mariadb -e "GRANT ALL PRIVILEGES ON \`$name\`.* TO '$user'@'localhost';"
+    # Force creation/update of user password (IDENTIFIED BY ensures sync)
+    mariadb -e "GRANT ALL PRIVILEGES ON \`$name\`.* TO '$user'@'127.0.0.1' IDENTIFIED BY '$pass';"
+    mariadb -e "GRANT ALL PRIVILEGES ON \`$name\`.* TO '$user'@'localhost' IDENTIFIED BY '$pass';"
     
     mariadb -e "FLUSH PRIVILEGES;"
 }
@@ -432,14 +430,14 @@ delete_site() {
     # 2. Remove Files
     rm -rf "/var/www/$domain"
     
-    # 3. Remove Database (if exists)
-    log_info "Removing database $db_name..."
-    mariadb -e "DROP DATABASE IF EXISTS $db_name;"
-    # We might leave the user, as users can be shared, but usually, they are unique here.
-    # To be safe, we just drop the DB.
+    # 3. Remove Database & Users (Fresh Start)
+    log_info "Removing database \`$db_name\` and associated users..."
+    mariadb -e "DROP DATABASE IF EXISTS \`$db_name\`;"
+    mariadb -e "DROP USER IF EXISTS '$db_user'@'localhost', '$db_user'@'127.0.0.1';"
+    mariadb -e "FLUSH PRIVILEGES;"
     
     systemctl reload nginx
-    log_success "Site $domain and its database deleted."
+    log_success "Site $domain, its database, and user deleted (Fresh Start)."
 }
 
 list_sites() {
