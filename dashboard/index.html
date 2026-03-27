@@ -51,8 +51,17 @@
             font-size: 1.5rem;
             font-weight: 700;
             background: linear-gradient(to right, var(--primary), var(--secondary));
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            color: var(--primary); /* Fallback */
+            display: inline-block;
+        }
+
+        .logo span {
+            -webkit-text-fill-color: var(--text-muted);
+            opacity: 0.7;
+            font-weight: 300;
         }
 
         .status-badge {
@@ -69,6 +78,16 @@
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 1.5rem;
             margin-bottom: 2rem;
+        }
+
+        .grid-split {
+            grid-template-columns: 1fr 2fr;
+        }
+
+        @media (max-width: 768px) {
+            .grid-split {
+                grid-template-columns: 1fr;
+            }
         }
 
         .card {
@@ -156,7 +175,7 @@
 <body>
     <div class="container">
         <header>
-            <div class="logo">SotoDash <span style="font-weight: 300; opacity: 0.7;">v1.0</span></div>
+            <div class="logo">SotoDash <span>v1.0</span></div>
             <div id="hostname" class="status-badge">Loading...</div>
         </header>
 
@@ -188,7 +207,7 @@
             </div>
         </div>
 
-        <div class="grid" style="grid-template-columns: 1fr 2fr;">
+        <div class="grid grid-split">
             <div class="card">
                 <div class="card-title">Services</div>
                 <ul id="services-list" class="services-list">
@@ -270,13 +289,15 @@
                 loadChart.update('none');
 
                 // Services
-                const servicesHtml = Object.entries(data.services).map(([name, status]) => `
-                    <li class="service-item">
-                        <span>${name.toUpperCase()}</span>
-                        <span><span class="dot ${status === 'active' ? 'online' : 'offline'}"></span> ${status}</span>
-                    </li>
-                `).join('');
-                document.getElementById('services-list').innerHTML = servicesHtml;
+                if (data.services) {
+                    const servicesHtml = Object.entries(data.services).map(([name, status]) => `
+                        <li class="service-item">
+                            <span>${name.toUpperCase()}</span>
+                            <span><span class="dot ${status === 'active' ? 'online' : 'offline'}"></span> ${status}</span>
+                        </li>
+                    `).join('');
+                    document.getElementById('services-list').innerHTML = servicesHtml;
+                }
 
             } catch (e) {
                 console.error("Failed to fetch stats", e);

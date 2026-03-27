@@ -10,11 +10,14 @@ handle_stack() {
     if [[ -z "$1" ]]; then
         echo "Usage: soto stack -[option]"
         echo "Options:"
-        echo "  -install    Install LEMP stack (Nginx, MariaDB, PHP)
-  -php=X.X    Install a specific PHP version (e.g., 8.2)
-  -mysql      Install MariaDB
-  -cache      Setup global FastCGI Cache
-"
+        echo "  -install    Install full LEMP stack"
+        echo "  -tune       Intelligent resource tuning"
+        echo "  -shield     Activate Server Shield hardening"
+        echo "  -firewall   Apply firewall rules"
+        echo "  -cache      Setup global FastCGI Cache"
+        echo "  -pma        Install phpMyAdmin globally"
+        echo "  -fix        Attempt to fix broken components"
+        echo "  -clean      Clean PPA and repository conflicts"
         return 0
     fi
 
@@ -35,7 +38,7 @@ handle_stack() {
             ;;
         -tune)
             log_info "Tuning server resources..."
-            tune_server
+            tune_stack
             ;;
         -firewall)
             log_info "Hardening server firewall..."
@@ -52,6 +55,14 @@ handle_stack() {
         -cache)
             log_info "Setting up global FastCGI Cache..."
             setup_cache
+            ;;
+        -shield)
+            log_info "Activating Server Shield..."
+            setup_shield
+            ;;
+        -pma)
+            log_info "Installing phpMyAdmin..."
+            install_pma
             ;;
         -fix)
             log_info "Attempting to fix broken stack components..."
@@ -235,9 +246,54 @@ purge_stack() {
     apt autoremove -y -qq
     
     # 4. Remove directories
-    rm -rf /etc/nginx /etc/php /var/www/html /var/lib/mysql /var/log/nginx /var/log/mysql
+    rm -rf /etc/nginx /etc/php /var/www/html /var/lib/mysql /var/log/nginx /var/log/mysql /var/www/22222/pma
     
     log_success "System purged of existing stack components."
+}
+
+install_pma() {
+    local pma_dir="/var/www/22222/pma"
+    mkdir -p "$pma_dir"
+    
+    log_info "Downloading latest phpMyAdmin..."
+    cd /tmp
+    wget https://www.phpmyadmin.net/downloads/phpMyAdmin-latest-all-languages.tar.gz -q
+    tar -xzf phpMyAdmin-latest-all-languages.tar.gz
+    rm -rf "$pma_dir"/*
+    mv phpMyAdmin-*-all-languages/* "$pma_dir/"
+    rm -rf phpMyAdmin-latest-all-languages.tar.gz phpMyAdmin-*-all-languages
+    
+    # Configure
+    cp "$pma_dir/config.sample.inc.php" "$pma_dir/config.inc.php"
+    local blowfish=$(openssl rand -base64 32)
+    sed -i "s/\$cfg\['blowfish_secret'\] = '';/\$cfg\['blowfish_secret'\] = '$blowfish';/" "$pma_dir/config.inc.php"
+    
+    chown -R www-data:www-data "$pma_dir"
+    
+    # Create Nginx snippet for subfolder access
+    log_info "Creating Nginx snippet for /pma access..."
+    local php_sock="/var/run/php/php$(get_php_version)-fpm.sock"
+    cat > /etc/nginx/snippets/pma.conf <<EOF
+location /pma {
+    alias $pma_dir;
+    index index.php;
+
+    location ~ ^/pma/(.+\.php)$ {
+        alias $pma_dir/\$1;
+        fastcgi_pass unix:$php_sock;
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME \$request_filename;
+    }
+
+    location ~* ^/pma/(.+\.(jpg|jpeg|gif|css|png|js|ico|html|xml|txt))$ {
+        alias $pma_dir/\$1;
+    }
+}
+EOF
+
+    log_success "phpMyAdmin installed and snippet created at /etc/nginx/snippets/pma.conf"
+    log_info "Use 'sudo soto web <domain> -pma' to enable it on a site."
 }
 
 clean_ppa() {

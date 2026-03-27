@@ -55,6 +55,15 @@ check_command() {
     return 0
 }
 
+# Ensure htpasswd is available
+ensure_htpasswd() {
+    if ! check_command htpasswd; then
+        log_info "Installing apache2-utils for authentication support..."
+        apt update -qq > /dev/null
+        apt install -y apache2-utils -qq > /dev/null
+    fi
+}
+
 # Detect installed PHP version
 get_php_version() {
     if command -v php &> /dev/null; then
@@ -62,6 +71,11 @@ get_php_version() {
     else
         # Fallback to directory listing if php command not in PATH
         local version=$(ls /etc/php 2>/dev/null | sort -V | tail -n 1)
+        # UI Fixes (completed)
+        # - [x] **Phase 1: SotoDash UI Fixes**
+        # - [x] Add background-clip standard properties and fallback to `index.html`
+        # - [x] Fix Version Tag visibility in `index.html`
+        # - [x] Improve Grid responsiveness in `index.html`
         if [[ -z "$version" ]]; then
             echo "8.4" # Default fallback
         else

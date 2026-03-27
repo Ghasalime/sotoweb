@@ -4,69 +4,184 @@
 # Author: Ghasali
 
 handle_auth() {
-    # Check for root
     check_root
+    ensure_htpasswd
 
-    # Ensure apache2-utils is installed
-    install_auth_tools
+    local target="$1"
+    local option="$2"
+    local username="$3"
 
-    OPTION="$1"
-    USER="$2"
-
-    if [[ -z "$OPTION" ]]; then
-        echo "Usage: soto auth -[option] [username]"
+    if [[ -z "$target" || "$target" == "-h" || "$target" == "--help" ]]; then
+        echo "Usage: soto auth <domain|global> -[option] [username]"
+        echo ""
+        echo "Available Targets:"
+        echo "  <domain>        Protect a specific website (e.g. example.com)"
+        echo "  global          Protect all global tools (e.g. SotoDash)"
+        echo ""
         echo "Options:"
-        echo "  -add        Add or update an HTTP auth user"
-        echo "  -delete     Remove an HTTP auth user"
-        echo "  -list       List all HTTP auth users"
+        echo "  -add        Add or update a user"
+        echo "  -delete     Delete a user"
+        echo "  -list       List all users"
+        echo "  -wp-admin   Protect the WordPress Admin area (/wp-admin)"
+        echo "  -path       Protect a custom directory (domain required)"
+        echo "  -off        Remove all HTTP auth from a domain"
+        echo ""
+        echo "Example:"
+        echo "  sudo soto auth example.com -add ghasali"
+        echo "  sudo soto auth example.com -wp-admin"
         return 0
     fi
 
-    HTPASSWD_FILE="/etc/nginx/.htpasswd"
+    local auth_dir="/etc/sotoweb/auth"
+    mkdir -p "$auth_dir"
 
-    case "$OPTION" in
+    local htpasswd_file
+    if [[ "$target" == "global" ]]; then
+        htpasswd_file="$auth_dir/global.htpasswd"
+    else
+        htpasswd_file="$auth_dir/$target.htpasswd"
+    fi
+
+    case "$option" in
         -add)
-            if [[ -z "$USER" ]]; then
-                log_error "Username required. (e.g., soto auth -add ghasali)"
+            if [[ -z "$username" ]]; then
+                log_error "Username required. (e.g., soto auth $target -add ghasali)"
                 return 1
             fi
-            log_info "Setting password for user: $USER"
-            if [[ ! -f "$HTPASSWD_FILE" ]]; then
-                htpasswd -c "$HTPASSWD_FILE" "$USER"
+            log_info "Setting password for user: $username"
+            if [[ ! -f "$htpasswd_file" ]]; then
+                htpasswd -c "$htpasswd_file" "$username"
             else
-                htpasswd "$HTPASSWD_FILE" "$USER"
+                htpasswd "$htpasswd_file" "$username"
             fi
-            log_success "User $USER added/updated successfully."
+            log_success "User $username added/updated for $target."
             ;;
         -delete)
-            if [[ -z "$USER" ]]; then
-                log_error "Username required. (e.g., soto auth -delete ghasali)"
+            if [[ -z "$username" ]]; then
+                log_error "Username required. (e.g., soto auth $target -delete ghasali)"
                 return 1
             fi
-            if [[ ! -f "$HTPASSWD_FILE" ]]; then
-                log_error "No auth users exist."
+            if [[ ! -f "$htpasswd_file" ]]; then
+                log_error "No auth users exist for $target."
                 return 1
             fi
-            sed -i "/^$USER:/d" "$HTPASSWD_FILE"
-            log_success "User $USER removed."
+            sed -i "/^$username:/d" "$htpasswd_file"
+            log_success "User $username removed from $target."
             ;;
         -list)
-            if [[ ! -f "$HTPASSWD_FILE" ]]; then
-                log_info "No auth users configured."
+            if [[ ! -f "$htpasswd_file" ]]; then
+                log_info "No auth users configured for $target."
                 return 0
             fi
-            log_info "Registered HTTP Auth Users:"
-            awk -F: '{print " - " $1}' "$HTPASSWD_FILE"
+            log_info "Auth Users for $target:"
+            awk -F: '{print " - " $1}' "$htpasswd_file"
+            ;;
+        -wp-admin)
+            if [[ "$target" == "global" ]]; then
+                log_error "-wp-admin requires a specific domain."
+                return 1
+            fi
+            enable_wp_auth "$target" "$htpasswd_file"
+            ;;
+        -path=*)
+            local path="${option#*=}"
+            if [[ "$target" == "global" ]]; then
+                log_error "-path requires a specific domain."
+                return 1
+            fi
+            enable_path_auth "$target" "$path" "$htpasswd_file"
+            ;;
+        -off)
+            disable_auth "$target"
             ;;
         *)
-            log_error "Unknown auth option: $OPTION"
+            log_error "Unknown auth option: $option"
             ;;
     esac
 }
 
-install_auth_tools() {
-    if ! check_command htpasswd; then
-        log_info "Installing apache2-utils for htpasswd support..."
-        apt install -y -qq apache2-utils
+enable_wp_auth() {
+    local domain=$1
+    local htpasswd=$2
+    local vhost="/etc/nginx/sites-available/$domain"
+
+    if [[ ! -f "$vhost" ]]; then
+        log_error "Site $domain not found."
+        return 1
     fi
+
+    if [[ ! -f "$htpasswd" ]]; then
+        log_warn "No users configured for $domain yet. Run 'soto auth $domain -add' first."
+        # We continue anyway to setup the config
+    fi
+
+    log_info "Protecting WordPress admin for $domain..."
+    
+    # Create or update auth snippet
+    local snippet="/etc/nginx/conf.d/auth-$domain.conf"
+    cat > "$snippet" <<EOF
+location ~* /(wp-admin/|wp-login\.php) {
+    auth_basic "Restricted Area";
+    auth_basic_user_file $htpasswd;
+    include snippets/fastcgi-php.conf;
+    fastcgi_pass unix:/var/run/php/php$(get_php_version)-fpm.sock;
+}
+EOF
+
+    # Include snippet in vhost if not present
+    if ! grep -q "auth-$domain.conf" "$vhost"; then
+        sed -i "/server_name/a \    include /etc/nginx/conf.d/auth-$domain.conf;" "$vhost"
+    fi
+
+    nginx -t && systemctl reload nginx
+    log_success "WordPress admin protection enabled for $domain."
+}
+
+enable_path_auth() {
+    local domain=$1
+    local path=$2
+    local htpasswd=$3
+    local vhost="/etc/nginx/sites-available/$domain"
+
+    if [[ ! -f "$vhost" ]]; then
+        log_error "Site $domain not found."
+        return 1
+    fi
+
+    log_info "Protecting path $path for $domain..."
+    
+    # Simple injection for basic paths
+    # (In a real app, we'd use a more robust template system)
+    local slug=$(echo "$path" | tr '/' '_')
+    local snippet="/etc/nginx/conf.d/auth-$domain-$slug.conf"
+    
+    cat > "$snippet" <<EOF
+location $path {
+    auth_basic "Restricted Area";
+    auth_basic_user_file $htpasswd;
+}
+EOF
+
+    if ! grep -q "auth-$domain-$slug.conf" "$vhost"; then
+        sed -i "/server_name/a \    include /etc/nginx/conf.d/auth-$domain-$slug.conf;" "$vhost"
+    fi
+
+    nginx -t && systemctl reload nginx
+    log_success "Path $path protection enabled for $domain."
+}
+
+disable_auth() {
+    local domain=$1
+    local vhost="/etc/nginx/sites-available/$domain"
+
+    log_info "Removing all HTTP auth from $domain..."
+    
+    # Remove includes from vhost
+    sed -i "/auth-$domain/d" "$vhost"
+    
+    # Remove snippets
+    rm -f /etc/nginx/conf.d/auth-$domain*.conf
+    
+    nginx -t && systemctl reload nginx
+    log_success "HTTP auth removed from $domain."
 }

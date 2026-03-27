@@ -21,8 +21,24 @@ handle_web() {
         echo "Options:"
         echo "  -wp         Create a WordPress site"
         echo "  -php        Create a standard PHP site"
-        echo "  -ssl        Enable Let's Encrypt SSL"
-        echo "  -delete     Remove a site"
+        echo "  -static     Set up a static HTML site"
+        echo "  -proxy=url  Set up a reverse proxy (e.g. -proxy=http://127.0.0.1:3000)"
+        echo "  -redirect=url Set up a 301 redirection (e.g. -redirect=https://google.com)"
+        echo "  -pma        Enable phpMyAdmin access (/pma)"
+        echo "  -alias=url  Add a domain alias/parked domain"
+        echo "  -db-import=file.sql Import a database dump"
+        echo "  -on / -off  Enable or disable site access"
+        echo "  -info       Show detailed site information"
+        echo "  -delete     Remove a site and its database"
+        echo ""
+        echo "Global Options:"
+        echo "  soto web -list  List all registered sites"
+        return 0
+    fi
+
+    # Global: List sites
+    if [[ "$DOMAIN" == "-list" ]]; then
+        list_sites
         return 0
     fi
 
@@ -68,6 +84,34 @@ handle_web() {
             log_info "Disabling FastCGI Cache for $DOMAIN..."
             disable_cache "$DOMAIN"
             ;;
+        -proxy=*)
+            local target="${OPTION#*=}"
+            log_info "Creating reverse proxy for $DOMAIN -> $target..."
+            create_site "$DOMAIN" "proxy" "$target"
+            ;;
+        -redirect=*)
+            local target="${OPTION#*=}"
+            log_info "Creating redirection for $DOMAIN -> $target..."
+            create_site "$DOMAIN" "redirect" "$target"
+            ;;
+        -on)
+            enable_site "$DOMAIN"
+            ;;
+        -off)
+            disable_site "$DOMAIN"
+            ;;
+        -pma)
+            enable_pma "$DOMAIN"
+            ;;
+        -alias=*)
+            local alias_domain="${OPTION#*=}"
+            add_site_alias "$DOMAIN" "$alias_domain"
+            ;;
+        -db-import=*)
+            local sql_file="${OPTION#*=}"
+            import_site_db "$DOMAIN" "$sql_file"
+            ;;
+        -info)
         -delete)
             log_warn "Deleting site $DOMAIN..."
             delete_site "$DOMAIN"
@@ -97,15 +141,23 @@ create_site() {
     # 3. Create Nginx vhost
     log_info "Generating Nginx virtual host..."
     VHOST_FILE="/etc/nginx/sites-available/$domain"
-    TEMPLATE_FILE="$SOTO_BASE_DIR/templates/nginx-php.conf"
-
-    if [[ ! -f "$TEMPLATE_FILE" ]]; then
-        log_error "Nginx template not found."
-        return 1
+    
+    if [[ "$type" == "proxy" ]]; then
+        TEMPLATE_FILE="$SOTO_BASE_DIR/templates/nginx-proxy.conf"
+        cp "$TEMPLATE_FILE" "$VHOST_FILE"
+        sed -i "s|{{DOMAIN}}|$domain|g" "$VHOST_FILE"
+        sed -i "s|{{TARGET}}|$php_ver|g" "$VHOST_FILE" # php_ver used as target URL here
+    elif [[ "$type" == "redirect" ]]; then
+        TEMPLATE_FILE="$SOTO_BASE_DIR/templates/nginx-redirect.conf"
+        cp "$TEMPLATE_FILE" "$VHOST_FILE"
+        sed -i "s|{{DOMAIN}}|$domain|g" "$VHOST_FILE"
+        sed -i "s|{{TARGET}}|$php_ver|g" "$VHOST_FILE"
+    else
+        TEMPLATE_FILE="$SOTO_BASE_DIR/templates/nginx-php.conf"
+        cp "$TEMPLATE_FILE" "$VHOST_FILE"
+        sed -i "s|{{DOMAIN}}|$domain|g" "$VHOST_FILE"
+        sed -i "s|{{PHP_VER}}|$php_ver|g" "$VHOST_FILE"
     fi
-
-    # Replace placeholders using sed
-    sed "s/{{DOMAIN}}/$domain/g; s/{{PHP_VER}}/$php_ver/g" "$TEMPLATE_FILE" > "$VHOST_FILE"
 
     # Enable site
     ln -sf "$VHOST_FILE" "/etc/nginx/sites-enabled/$domain"
@@ -329,6 +381,161 @@ delete_site() {
     
     systemctl reload nginx
     log_success "Site $domain and its database deleted."
+}
+
+list_sites() {
+    log_info "Registered Websites:"
+    printf "%-30s %-10s %-10s\n" "Domain" "Type" "Status"
+    echo "------------------------------------------------------------"
+    
+    for vhost in /etc/nginx/sites-available/*; do
+        [[ ! -f "$vhost" ]] && continue
+        local domain=$(basename "$vhost")
+        [[ "$domain" == "default" || "$domain" == "soto-dash" ]] && continue
+        
+        local status="OFF"
+        [[ -L "/etc/nginx/sites-enabled/$domain" ]] && status="ON"
+        
+        local type="PHP"
+        if grep -q "wp-config.php" "$vhost" 2>/dev/null || [[ -f "/var/www/$domain/wp-config.php" ]]; then
+            type="WP"
+        elif grep -q "proxy_pass" "$vhost" 2>/dev/null; then
+            type="PROXY"
+        elif ! grep -q "fastcgi_pass" "$vhost" 2>/dev/null; then
+            type="STATIC"
+        fi
+        
+        printf "%-30s %-10s %-10s\n" "$domain" "$type" "$status"
+    done
+}
+
+site_info() {
+    local domain=$1
+    local vhost="/etc/nginx/sites-available/$domain"
+    
+    if [[ ! -f "$vhost" ]]; then
+        log_error "Site $domain not found."
+        return 1
+    fi
+    
+    display_banner
+    echo "--- Site Info: $domain ---"
+    echo "Root Dir:    /var/www/$domain"
+    
+    # PHP Version
+    local php_ver=$(grep -o "php[0-9.]\+-fpm" "$vhost" | head -n 1 | sed 's/php//;s/-fpm//')
+    echo "PHP Version: ${php_ver:-N/A}"
+    
+    # SSL Status
+    if grep -q "listen 443 ssl" "$vhost"; then
+        echo "SSL Status:  Active (HTTPS)"
+    else
+        echo "SSL Status:  Disabled (HTTP)"
+    fi
+    
+    # Database Info for WP
+    if [[ -f "/var/www/$domain/wp-config.php" ]]; then
+        local db_name=$(grep "DB_NAME" "/var/www/$domain/wp-config.php" | cut -d\' -f4)
+        local db_user=$(grep "DB_USER" "/var/www/$domain/wp-config.php" | cut -d\' -f4)
+        echo "Database:    $db_name (User: $db_user)"
+    fi
+    
+    echo "--------------------------------"
+}
+
+enable_site() {
+    local domain=$1
+    if [[ ! -f "/etc/nginx/sites-available/$domain" ]]; then
+        log_error "Site $domain not found."
+        return 1
+    fi
+    ln -sf "/etc/nginx/sites-available/$domain" "/etc/nginx/sites-enabled/$domain"
+    nginx -t && systemctl reload nginx
+    log_success "Site $domain enabled."
+}
+
+disable_site() {
+    local domain=$1
+    rm -f "/etc/nginx/sites-enabled/$domain"
+    systemctl reload nginx
+    log_warn "Site $domain disabled."
+}
+
+enable_pma() {
+    local domain=$1
+    local vhost="/etc/nginx/sites-available/$domain"
+    
+    if [[ ! -f "$vhost" ]]; then
+        log_error "Site $domain not found."
+        return 1
+    fi
+    
+    # Ensure PMA is installed globally
+    if [[ ! -f "/etc/nginx/snippets/pma.conf" ]]; then
+        source "$SOTO_BASE_DIR/inc/stack.sh"
+        install_pma
+    fi
+    
+    log_info "Enabling phpMyAdmin for $domain..."
+    
+    # Add include if not present
+    if ! grep -q "snippets/pma.conf" "$vhost"; then
+        sed -i "/server_name/a \    include snippets/pma.conf;" "$vhost"
+    fi
+    
+    nginx -t && systemctl reload nginx
+    log_success "phpMyAdmin enabled for $domain. Access at http://$domain/pma"
+}
+
+add_site_alias() {
+    local domain=$1
+    local alias=$2
+    local vhost="/etc/nginx/sites-available/$domain"
+    
+    if [[ ! -f "$vhost" ]]; then
+        log_error "Site $domain not found."
+        return 1
+    fi
+    
+    log_info "Adding alias $alias to $domain..."
+    # Insert alias into server_name line if not present
+    if ! grep -q "server_name .*$alias" "$vhost"; then
+        sed -i "s/server_name \(.*\);/server_name \1 $alias;/" "$vhost"
+    fi
+    
+    nginx -t && systemctl reload nginx
+    log_success "Alias $alias added to $domain. Please ensure DNS highlights to this server."
+}
+
+import_site_db() {
+    local domain=$1
+    local sql_file=$2
+    
+    if [[ ! -f "$sql_file" ]]; then
+        log_error "SQL file $sql_file not found."
+        return 1
+    fi
+    
+    # Try to find DB name from wp-config or use domain-based name
+    local db_name=""
+    if [[ -f "/var/www/$domain/wp-config.php" ]]; then
+        db_name=$(grep "DB_NAME" "/var/www/$domain/wp-config.php" | cut -d\' -f4)
+    fi
+    
+    if [[ -z "$db_name" ]]; then
+        db_name=$(echo "${domain//./_}" | cut -c1-64)
+    fi
+    
+    log_info "Importing $sql_file into database $db_name..."
+    # Ensure DB exists
+    mariadb -e "CREATE DATABASE IF NOT EXISTS $db_name;"
+    
+    # Import
+    if mariadb "$db_name" < "$sql_file"; then
+        log_success "Database import completed for $domain."
+    else
+        log_error "Database import failed."
+    fi
 }
 
 source_ssl() {
