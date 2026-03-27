@@ -308,32 +308,43 @@ install_wordpress() {
     log_info "Downloading and configuring WordPress..."
     cd "/var/www/$domain" || exit
     
-    # Fix ownership before WP-CLI steps
-    chown -R www-data:www-data "/var/www/$domain"
-    
+    # Prepare local cache directory
+    local cache_dir="/var/lib/sotoweb/core"
+    local cache_file="$cache_dir/wordpress-latest.tar.gz"
+    mkdir -p "$cache_dir"
+
     # Create dedicated temporary workspace for WP-CLI
     local wp_ws="/tmp/soto_wp_$(date +%s)"
     mkdir -p "$wp_ws"
     chmod 777 "$wp_ws"
 
-    # Download WP using dedicated workspace
-    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp core download --allow-root
-    
-    # Create wp-config.php (Nuclear fix for mysqli_init)
-    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --dbhost="127.0.0.1" --allow-root --skip-check
-    
-    # Enable per-site FastCGI Cache
-    enable_cache "$domain"
-    
-    # Install Redis Object Cache Plugin (Download only, activation after browser install)
+    # Step 1: Extract or Download WordPress
+    if [[ -f "$cache_file" ]]; then
+        log_info "Using cached WordPress core..."
+        tar -xzf "$cache_file" -C "/var/www/$domain" --strip-components=1
+    else
+        log_info "Downloading and caching WordPress core..."
+        sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp core download --allow-root
+        # Save to cache for next time
+        tar -czf "$cache_file" -C "/var/www/$domain" .
+    fi
+    chown -R www-data:www-data "/var/www/$domain"
+
+    # Step 2: Install Redis Object Cache Plugin (MUST be before config if not installed)
     log_info "Adding Redis Object Cache plugin (Download only)..."
     sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp plugin install redis-cache --allow-root
     
-    # NEW: Automatic WP-Admin Protection (Webinoly Style)
-    log_info "Securing /wp-admin with HTTP Authentication..."
+    # Step 3: Create wp-config.php (Nuclear fix for mysqli_init)
+    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --dbhost="127.0.0.1" --allow-root --skip-check
+    
+    # Step 4: Enable per-site FastCGI Cache
+    enable_cache "$domain"
+    
+    # NEW: Automatic WP-Admin Protection (Webinoly Style - Global File)
+    log_info "Securing /wp-admin with Global HTTP Authentication..."
     source "$SOTO_BASE_DIR/inc/auth.sh"
-    local auth_pass=$(openssl rand -hex 8)
-    handle_auth "$domain" "-wp" "soto" "$auth_pass"
+    # We no longer generate random password here. It uses the global file.
+    enable_wp_auth "$domain" "/etc/sotoweb/.htpasswd"
     
     # Cleanup workspace
     rm -rf "$wp_ws"
@@ -341,7 +352,7 @@ install_wordpress() {
     log_success "Site $domain created successfully!"
     echo "------------------------------------------"
     echo "1. Finish WP Setup: http://$domain/wp-admin/install.php"
-    echo "2. WP-Admin Auth:   soto / $auth_pass"
+    echo "2. Global Auth hint: sudo soto auth -add [user]"
     echo "3. Redirects:       www.$domain -> $domain"
     echo "------------------------------------------"
     echo "Setelah setup WordPress selesai, aktifkan Redis di Dashboard!"

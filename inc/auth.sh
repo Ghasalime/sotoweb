@@ -11,13 +11,31 @@ handle_auth() {
     local option="$2"
     local username="$3"
 
+    # Default to global if first arg is an option
+    if [[ "$target" == -* ]]; then
+        username="$option"
+        option="$target"
+        target="global"
+    fi
+
     if [[ -z "$target" || "$target" == "-h" || "$target" == "--help" ]]; then
-        echo "Usage: soto auth <domain|global> -[option] [username]"
+        echo "Usage: soto auth [domain|global] -[option] [username]"
         echo ""
-        echo "Available Targets:"
-        echo "  <domain>        Protect a specific website (e.g. example.com)"
-        echo "  global          Protect all global tools (e.g. SotoDash)"
+        echo "Options:"
+        echo "  -add        Add or update a user (Global by default)"
+        echo "  -delete     Delete a user"
+        echo "  -list       List all users"
+        echo "  -wp-admin   Protect the WordPress Admin area (/wp-admin)"
+        echo "  -off        Remove all HTTP auth from a domain"
         echo ""
+        echo "Example:"
+        echo "  sudo soto auth -add ghasali"
+        echo "  sudo soto auth example.com -wp-admin"
+        return 0
+    fi
+
+    local auth_file="/etc/sotoweb/.htpasswd"
+    mkdir -p "/etc/sotoweb"
         echo "Options:"
         echo "  -add        Add or update a user"
         echo "  -delete     Delete a user"
@@ -32,15 +50,7 @@ handle_auth() {
         return 0
     fi
 
-    local auth_dir="/etc/sotoweb/auth"
-    mkdir -p "$auth_dir"
-
-    local htpasswd_file
-    if [[ "$target" == "global" ]]; then
-        htpasswd_file="$auth_dir/global.htpasswd"
-    else
-        htpasswd_file="$auth_dir/$target.htpasswd"
-    fi
+    local htpasswd_file="$auth_file"
 
     case "$option" in
         -add)
@@ -111,8 +121,9 @@ enable_wp_auth() {
     fi
 
     if [[ ! -f "$htpasswd" ]]; then
-        log_warn "No users configured for $domain yet. Run 'soto auth $domain -add' first."
-        # We continue anyway to setup the config
+        log_warn "No global users configured yet. Run 'sudo soto auth -add [user]' now."
+        # Create empty file to avoid Nginx error
+        touch "$htpasswd"
     fi
 
     log_info "Protecting WordPress admin for $domain..."
