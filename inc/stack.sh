@@ -57,6 +57,10 @@ handle_stack() {
             log_info "Attempting to fix broken stack components..."
             fix_stack
             ;;
+        -clean)
+            log_info "Cleaning up conflicting repositories..."
+            clean_ppa
+            ;;
         *)
             log_error "Unknown stack option: $1"
             ;;
@@ -90,13 +94,17 @@ install_lemp() {
 
 install_php() {
     local version=$1
+    
+    # Deep clean PPA before adding to avoid "Signed-By" conflicts
+    clean_ppa
+    
     log_info "Adding PHP repository (Ondřej Surý)..."
-    # Unified add-apt-repository for modern Ubuntu
-    add-apt-repository -y ppa:ondrej/php
+    # Unified add-apt-repository with proper locale for Noble (24.04)
+    LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
     apt update -qq
     
     log_info "Installing PHP $version and common extensions..."
-    apt install -y -qq "php$version-fpm" "php$version-mysql" "php$version-curl" "php$version-gd" "php$version-mbstring" "php$version-xml" "php$version-zip" "php$version-bcmath"
+    apt install -y -qq "php$version-fpm" "php$version-common" "php$version-mysql" "php$version-curl" "php$version-gd" "php$version-mbstring" "php$version-xml" "php$version-zip" "php$version-bcmath"
 
     log_success "PHP $version installed."
 }
@@ -194,6 +202,9 @@ setup_cache() {
 fix_stack() {
     if [[ ! -f "/etc/nginx/nginx.conf" ]]; then
         log_warn "Nginx configuration missing! Forcing Nginx reinstallation..."
+        # Clear any potential lock issues
+        rm -f /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock
+        
         # First try to fix broken packages
         apt install -f -y -qq
         # Reinstall Nginx to restore default configs
@@ -202,4 +213,22 @@ fix_stack() {
         mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/conf.d
         log_success "Nginx files restored."
     fi
+}
+
+clean_ppa() {
+    log_info "Searching for conflicting Ondřej PPA entries..."
+    
+    # 1. Remove .list and .sources files containing "ondrej"
+    find /etc/apt/sources.list.d/ -type f \( -name "*ondrej*" -o -name "*php*" \) -delete
+    
+    # 2. Remove "ondrej" entries from main sources.list if any
+    if grep -q "ondrej" /etc/apt/sources.list; then
+        sed -i '/ondrej/d' /etc/apt/sources.list
+    fi
+    
+    # 3. Remove conflicting keyrings
+    rm -f /usr/share/keyrings/php-archive-keyring.gpg
+    rm -f /etc/apt/keyrings/ppa-ondrej-php-noble.gpg
+    
+    log_success "APT repositories cleaned."
 }
