@@ -284,6 +284,11 @@ install_wordpress() {
 
     create_mysql_db "$db_name" "$db_user" "$db_pass"
 
+    # Ensure the system-wide PHP CLI matches our current version
+    local php_ver=$(get_php_version)
+    log_info "Synchronizing PHP CLI with version $php_ver..."
+    update-alternatives --set php "/usr/bin/php$php_ver" &> /dev/null
+    
     # Premium High-Performance Setup (Redis & Cache)
     log_info "Enabling High-Performance stack (Redis & FastCGI Cache)..."
     source "$SOTO_BASE_DIR/inc/stack.sh"
@@ -336,10 +341,19 @@ check_wp_cli() {
     
     # Proactive NUCLEAR fix for missing extensions
     if ! php -m | grep -q mysqli; then
-        log_info "Hardening PHP MySQL extension globally..."
+        local php_ver=$(get_php_version)
+        log_info "Hardening PHP MySQL extension for version $php_ver..."
+        
+        # Ensure the system default handles it
         apt-get install -y -qq php-mysql &> /dev/null
-        phpenmod -s cli mysqli mysqlnd &> /dev/null
-        phpenmod -s fpm mysqli mysqlnd &> /dev/null
+        
+        # Force alignment if still missing
+        if [[ -f "/usr/bin/php$php_ver" ]]; then
+            update-alternatives --set php "/usr/bin/php$php_ver" &> /dev/null
+        fi
+        
+        phpenmod -v "$php_ver" -s cli mysqli mysqlnd &> /dev/null
+        phpenmod -v "$php_ver" -s fpm mysqli mysqlnd &> /dev/null
     fi
 }
 
