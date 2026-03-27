@@ -35,6 +35,25 @@ check_root() {
     fi
 }
 
+# 1.1. Ensure PHP-FPM is healthy to prevent 502
+ensure_php_fpm_healthy() {
+    local php_ver=$(get_php_version)
+    local fpm_svc="php$php_ver-fpm"
+    if ! systemctl is-active --quiet "$fpm_svc"; then
+        log_warn "$fpm_svc is not running. Checking for other versions..."
+        # Fallback to any active PHP-FPM if 8.5/ghost version was detected
+        local alt_fpm=$(systemctl list-units --type=service --state=running | grep -oP 'php[0-9.]+-fpm' | head -n 1)
+        if [[ -n "$alt_fpm" ]]; then
+            log_info "Switching to active service: $alt_fpm"
+            php_ver=$(echo "$alt_fpm" | grep -oP '[0-9.]+')
+            fpm_svc="$alt_fpm"
+        else
+            log_info "Attempting to start $fpm_svc..."
+            systemctl start "$fpm_svc"
+        fi
+    fi
+}
+
 # Banner
 display_banner() {
     echo -e "${YELLOW}"
@@ -82,12 +101,14 @@ get_php_version() {
         php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;"
     else
         # Fallback to directory listing if php command not in PATH
-        local version=$(ls /etc/php 2>/dev/null | sort -V | tail -n 1)
-        # UI Fixes (completed)
-        # - [x] **Phase 1: SotoDash UI Fixes**
-        # - [x] Add background-clip standard properties and fallback to `index.html`
-        # - [x] Fix Version Tag visibility in `index.html`
-        # - [x] Improve Grid responsiveness in `index.html`
+        # Check for installed PHP-FPM binaries only
+        local version=$(ls /usr/sbin/php-fpm* 2>/dev/null | grep -oE '[0-9]+\.[0-9]' | sort -V | tail -n 1)
+        
+        if [[ -z "$version" ]]; then
+            # Check /etc/php folders as last resort but only if fpm folder exists
+            version=$(ls -d /etc/php/*/fpm 2>/dev/null | grep -oE '[0-9]+\.[0-9]' | sort -V | tail -n 1)
+        fi
+        
         if [[ -z "$version" ]]; then
             echo "8.4" # Default fallback
         else

@@ -134,12 +134,8 @@ create_site() {
     mkdir -p "/var/www/$domain"
     chown -R www-data:www-data "/var/www/$domain"
 
-    # 1.1. Ensure PHP-FPM is healthy to prevent 502
-    local fpm_svc="php$php_ver-fpm"
-    if ! systemctl is-active --quiet "$fpm_svc"; then
-        log_warn "$fpm_svc is not running. Attempting to start..."
-        systemctl start "$fpm_svc"
-    fi
+    # 1.1. Ensure PHP-FPM is healthy to prevent 502 (Nuclear Recovery)
+    ensure_php_fpm_healthy
 
     # 2. Add PHP index file if not existing
     if [[ ! -f "/var/www/$domain/index.php" ]]; then
@@ -377,6 +373,10 @@ update_site_php() {
     log_info "Updating PHP version to $version in Nginx configuration..."
     # Replace the phpX.X-fpm.sock line
     sed -i "s/php[0-9.]\+-fpm.sock/php$version-fpm.sock/g" "$vhost"
+    
+    # Align CLI version as well
+    log_info "Aligning system PHP CLI to $version..."
+    update-alternatives --set php "/usr/bin/php$version" &> /dev/null
     
     nginx -t && systemctl reload nginx
     log_success "PHP version for $domain updated to $version."

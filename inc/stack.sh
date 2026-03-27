@@ -126,9 +126,13 @@ install_php() {
     apt install -y -qq "php$version-fpm" "php$version-common" "php$version-mysql" "php$version-curl" "php$version-gd" "php$version-mbstring" "php$version-xml" "php$version-zip" "php$version-bcmath" php-mysql
     
     log_info "Enabling PHP MySQL extensions for CLI..."
-    phpenmod -v "$version" -s cli mysqli mysqlnd
+    phpenmod -v "$version" -s cli mysqli mysqlnd &> /dev/null
     
-    log_success "PHP $version installed and extensions hardened."
+    # Set this version as system default CLI
+    log_info "Setting PHP $version as default system version..."
+    update-alternatives --set php "/usr/bin/php$version" &> /dev/null
+    
+    log_success "PHP $version installed and set as default."
 }
 
 install_mysql() {
