@@ -266,11 +266,13 @@ install_wordpress() {
 
 check_wp_cli() {
     if ! check_command wp; then
-        curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+        log_info "Downloading WP-CLI..."
+        curl -L -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
         chmod +x wp-cli.phar
         mv wp-cli.phar /usr/local/bin/wp
-        chmod 755 /usr/local/bin/wp
     fi
+    # Always force permissions even if it already exists
+    chmod 755 /usr/local/bin/wp
 }
 
 create_mysql_db() {

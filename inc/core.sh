@@ -63,7 +63,7 @@ get_php_version() {
         # Fallback to directory listing if php command not in PATH
         local version=$(ls /etc/php 2>/dev/null | sort -V | tail -n 1)
         if [[ -z "$version" ]]; then
-            echo "8.3" # Default fallback
+            echo "8.4" # Default fallback
         else
             echo "$version"
         fi

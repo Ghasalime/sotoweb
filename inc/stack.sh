@@ -53,6 +53,10 @@ handle_stack() {
             log_info "Setting up global FastCGI Cache..."
             setup_cache
             ;;
+        -fix)
+            log_info "Attempting to fix broken stack components..."
+            fix_stack
+            ;;
         *)
             log_error "Unknown stack option: $1"
             ;;
@@ -67,7 +71,7 @@ install_lemp() {
     apt install -y -qq software-properties-common curl git unzip
 
     log_info "Installing Nginx..."
-    apt install -y -qq nginx
+    apt install -y nginx
 
     log_info "Installing MariaDB..."
     install_mysql
@@ -75,8 +79,11 @@ install_lemp() {
     # Ensure Nginx directories are ready
     mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/conf.d
 
-    log_info "Installing PHP (Default: 8.3)..."
-    install_php "8.3"
+    log_info "Installing PHP (Default: 8.4)..."
+    install_php "8.4"
+
+    # Final fix/check for Nginx
+    fix_stack
 
     log_success "LEMP stack installed successfully."
 }
@@ -84,7 +91,8 @@ install_lemp() {
 install_php() {
     local version=$1
     log_info "Adding PHP repository (Ondřej Surý)..."
-    add-apt-repository -y ppa:ondrej/php -q
+    # Unified add-apt-repository for modern Ubuntu
+    add-apt-repository -y ppa:ondrej/php
     apt update -qq
     
     log_info "Installing PHP $version and common extensions..."
@@ -177,5 +185,21 @@ setup_cache() {
     mkdir -p /var/cache/nginx/sotocache
     chown -R www-data:www-data /var/cache/nginx/sotocache
     cp "$SOTO_BASE_DIR/etc/soto-cache.conf" /etc/nginx/conf.d/soto-cache.conf
+    
+    # Ensure Nginx is healthy before reload
+    fix_stack
     nginx -t && systemctl reload nginx
+}
+
+fix_stack() {
+    if [[ ! -f "/etc/nginx/nginx.conf" ]]; then
+        log_warn "Nginx configuration missing! Forcing Nginx reinstallation..."
+        # First try to fix broken packages
+        apt install -f -y -qq
+        # Reinstall Nginx to restore default configs
+        apt install --reinstall -y -qq nginx nginx-common
+        # Ensure directories exist
+        mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/conf.d
+        log_success "Nginx files restored."
+    fi
 }
