@@ -4,7 +4,7 @@
 # Author: Ghasali
 
 # Set the base directory of the script
-SOTO_BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SOTO_BASE_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 
 # Include core functions
 source "$SOTO_BASE_DIR/inc/core.sh"
