@@ -133,6 +133,8 @@ create_site() {
     log_info "Setting up directory at /var/www/$domain..."
     mkdir -p "/var/www/$domain"
     chown -R www-data:www-data "/var/www/$domain"
+    
+    log_info "Enabling WWW redirection: www.$domain -> $domain..."
 
     # 1.1. Ensure PHP-FPM is healthy and aligned (Returns the active version)
     php_ver=$(ensure_php_fpm_healthy)
@@ -320,32 +322,29 @@ install_wordpress() {
     # Create wp-config.php (Nuclear fix for mysqli_init)
     sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --dbhost="127.0.0.1" --allow-root --skip-check
     
-    # NEW: Automated WordPress Core Installation (Prevents DB Connection Error)
-    local wp_admin_user="admin"
-    local wp_admin_pass=$(openssl rand -hex 12)
-    local wp_admin_email="admin@$domain"
-    
-    log_info "Initializing WordPress tables (Zero-Click)..."
-    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp core install --url="http://$domain" --title="SotoWeb Site: $domain" --admin_user="$wp_admin_user" --admin_password="$wp_admin_pass" --admin_email="$wp_admin_email" --skip-email --allow-root
-    
     # Enable per-site FastCGI Cache
     enable_cache "$domain"
     
-    # Install and Activate Redis Object Cache Plugin
-    log_info "Installing and configuring Redis Object Cache..."
-    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp plugin install redis-cache --activate --allow-root
-    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp redis enable --allow-root
+    # Install Redis Object Cache Plugin (Download only, activation after browser install)
+    log_info "Adding Redis Object Cache plugin (Download only)..."
+    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp plugin install redis-cache --allow-root
+    
+    # NEW: Automatic WP-Admin Protection (Webinoly Style)
+    log_info "Securing /wp-admin with HTTP Authentication..."
+    source "$SOTO_BASE_DIR/inc/auth.sh"
+    local auth_pass=$(openssl rand -hex 8)
+    handle_auth "$domain" "-wp" "soto" "$auth_pass"
     
     # Cleanup workspace
     rm -rf "$wp_ws"
     
-    log_success "WordPress 'Ultra' ready for $domain!"
+    log_success "Site $domain created successfully!"
     echo "------------------------------------------"
-    echo " Admin Panel: http://$domain/wp-admin"
-    echo " Username:    $wp_admin_user"
-    echo " Password:    $wp_admin_pass"
+    echo "1. Finish WP Setup: http://$domain/wp-admin/install.php"
+    echo "2. WP-Admin Auth:   soto / $auth_pass"
+    echo "3. Redirects:       www.$domain -> $domain"
     echo "------------------------------------------"
-    echo "Situs sudah siap pakai dengan Redis & Cacheaktif!"
+    echo "Setelah setup WordPress selesai, aktifkan Redis di Dashboard!"
 }
 
 check_wp_cli() {
