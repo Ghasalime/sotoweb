@@ -312,11 +312,23 @@ update_site_php() {
 
 delete_site() {
     local domain=$1
+    local db_name=$(echo "${domain//./_}" | cut -c1-64)
+
+    # 1. Remove Nginx config
     rm -f "/etc/nginx/sites-enabled/$domain"
     rm -f "/etc/nginx/sites-available/$domain"
+    
+    # 2. Remove Files
     rm -rf "/var/www/$domain"
+    
+    # 3. Remove Database (if exists)
+    log_info "Removing database $db_name..."
+    mariadb -e "DROP DATABASE IF EXISTS $db_name;"
+    # We might leave the user, as users can be shared, but usually, they are unique here.
+    # To be safe, we just drop the DB.
+    
     systemctl reload nginx
-    log_success "Site $domain deleted."
+    log_success "Site $domain and its database deleted."
 }
 
 source_ssl() {
