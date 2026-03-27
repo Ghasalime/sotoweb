@@ -41,7 +41,7 @@ ensure_php_fpm_healthy() {
     local fpm_svc="php$php_ver-fpm"
     if ! systemctl is-active --quiet "$fpm_svc"; then
         log_warn "$fpm_svc is not running. Checking for other versions..."
-        # Fallback to any active PHP-FPM if 8.5/ghost version was detected
+        # Fallback to any active PHP-FPM if ghost version was detected
         local alt_fpm=$(systemctl list-units --type=service --state=running | grep -oP 'php[0-9.]+-fpm' | head -n 1)
         if [[ -n "$alt_fpm" ]]; then
             log_info "Switching to active service: $alt_fpm"
@@ -52,6 +52,9 @@ ensure_php_fpm_healthy() {
             systemctl start "$fpm_svc"
         fi
     fi
+    # ALIGN CLIP: Always synchronize the CLI with the version we just picked
+    update-alternatives --set php "/usr/bin/php$php_ver" &> /dev/null
+    echo "$php_ver"
 }
 
 # Banner
@@ -97,24 +100,28 @@ ensure_htpasswd() {
 
 # Detect installed PHP version
 get_php_version() {
-    if command -v php &> /dev/null; then
-        php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;"
-    else
-        # Fallback to directory listing if php command not in PATH
-        # Check for installed PHP-FPM binaries only
-        local version=$(ls /usr/sbin/php-fpm* 2>/dev/null | grep -oE '[0-9]+\.[0-9]' | sort -V | tail -n 1)
-        
-        if [[ -z "$version" ]]; then
-            # Check /etc/php folders as last resort but only if fpm folder exists
-            version=$(ls -d /etc/php/*/fpm 2>/dev/null | grep -oE '[0-9]+\.[0-9]' | sort -V | tail -n 1)
+        # Prioritize SotoWeb's standard version (8.4) if healthy
+        if [[ -f "/usr/sbin/php-fpm8.4" ]] && php8.4 -m | grep -q mysqli; then
+            echo "8.4"
+            return 0
         fi
+
+        # Otherwise, check for any installed PHP-FPM binaries with mysqli
+        for bin in /usr/sbin/php-fpm[0-9.]*; do
+            local ver=$(echo "$bin" | grep -oE '[0-9]+\.[0-9]')
+            if [[ -n "$ver" ]] && "/usr/bin/php$ver" -m | grep -q mysqli 2>/dev/null; then
+                echo "$ver"
+                return 0
+            fi
+        done
         
-        if [[ -z "$version" ]]; then
-            echo "8.4" # Default fallback
-        else
-            echo "$version"
+        # Fallback to current CLI version if it has mysqli
+        if php -m | grep -q mysqli; then
+            php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;"
+            return 0
         fi
-    fi
+
+        echo "8.4" # Absolute fallback
 }
 
 # Get PHP-FPM socket path

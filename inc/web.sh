@@ -134,8 +134,8 @@ create_site() {
     mkdir -p "/var/www/$domain"
     chown -R www-data:www-data "/var/www/$domain"
 
-    # 1.1. Ensure PHP-FPM is healthy to prevent 502 (Nuclear Recovery)
-    ensure_php_fpm_healthy
+    # 1.1. Ensure PHP-FPM is healthy and aligned (Returns the active version)
+    php_ver=$(ensure_php_fpm_healthy)
 
     # 2. Add PHP index file if not existing
     if [[ ! -f "/var/www/$domain/index.php" ]]; then
@@ -309,18 +309,26 @@ install_wordpress() {
     # Fix ownership before WP-CLI steps
     chown -R www-data:www-data "/var/www/$domain"
     
-    # Download WP using /tmp for cache to avoid permissions issues
-    sudo -u www-data HOME=/tmp WP_CLI_CACHE_DIR=/tmp wp core download --allow-root
+    # Create dedicated temporary workspace for WP-CLI
+    local wp_ws="/tmp/soto_wp_$(date +%s)"
+    mkdir -p "$wp_ws"
+    chmod 777 "$wp_ws"
+
+    # Download WP using dedicated workspace
+    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp core download --allow-root
     
     # Create wp-config.php (Nuclear fix for mysqli_init)
-    sudo -u www-data HOME=/tmp WP_CLI_CACHE_DIR=/tmp wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --allow-root --skip-check
+    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --allow-root --skip-check
     
     # Enable per-site FastCGI Cache
     enable_cache "$domain"
-
+    
     # Install and Activate Redis Object Cache Plugin
     log_info "Installing Redis Object Cache plugin..."
-    sudo -u www-data HOME=/tmp WP_CLI_CACHE_DIR=/tmp wp plugin install redis-cache --activate --allow-root
+    sudo -u www-data HOME="$wp_ws" WP_CLI_CACHE_DIR="$wp_ws" wp plugin install redis-cache --activate --allow-root
+    
+    # Cleanup workspace
+    rm -rf "$wp_ws"
     
     log_success "WordPress 'Ultra' ready for $domain!"
     echo "------------------------------------------"
