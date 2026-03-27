@@ -25,6 +25,16 @@ handle_web() {
             log_info "Creating PHP site for $DOMAIN..."
             create_site "$DOMAIN" "php"
             ;;
+        -php=*)
+            VERSION="${OPTION#*=}"
+            if [[ ! -f "/etc/nginx/sites-available/$DOMAIN" ]]; then
+                log_info "Creating new PHP $VERSION site for $DOMAIN..."
+                create_site "$DOMAIN" "php" "$VERSION"
+            else
+                log_info "Changing PHP version for $DOMAIN to $VERSION..."
+                update_site_php "$DOMAIN" "$VERSION"
+            fi
+            ;;
         -wp)
             log_info "Creating WordPress site for $DOMAIN..."
             create_site "$DOMAIN" "wp"
@@ -65,7 +75,7 @@ handle_web() {
 create_site() {
     local domain=$1
     local type=$2
-    local php_ver=$(get_php_version)
+    local php_ver="${3:-$(get_php_version)}"
 
     # 1. Create directory
     log_info "Setting up directory at /var/www/$domain..."
@@ -208,11 +218,22 @@ install_wordpress() {
     local db_name=$(echo "${domain//./_}" | cut -c1-64)
     local db_user=$(echo "user_${db_name}" | cut -c1-16)
     local db_pass=$(openssl rand -base64 12)
-    local admin_user="admin"
-    local admin_pass=$(openssl rand -base64 12)
-    local admin_email="admin@$domain"
 
     create_mysql_db "$db_name" "$db_user" "$db_pass"
+
+    # Premium High-Performance Setup (Redis & Cache)
+    log_info "Enabling High-Performance stack (Redis & FastCGI Cache)..."
+    source "$SOTO_BASE_DIR/inc/stack.sh"
+    
+    # Install Redis if not active
+    if ! systemctl is-active --quiet redis-server; then
+        install_redis
+    fi
+    
+    # Setup Global Cache if missing
+    if [[ ! -f "/etc/nginx/conf.d/soto-cache.conf" ]]; then
+        setup_cache
+    fi
 
     log_info "Downloading and configuring WordPress..."
     cd "/var/www/$domain" || exit
@@ -223,12 +244,17 @@ install_wordpress() {
     # Create wp-config.php
     sudo -u www-data wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --allow-root
     
-    # We do NOT run 'wp core install' here because the USER wants to finish the setup in the browser.
+    # Enable per-site FastCGI Cache
+    enable_cache "$domain"
+
+    # Install and Activate Redis Object Cache Plugin
+    log_info "Installing Redis Object Cache plugin..."
+    sudo -u www-data wp plugin install redis-cache --activate --allow-root
     
-    log_success "WordPress files and database for $domain are ready!"
+    log_success "WordPress 'Ultra' ready for $domain!"
     echo "------------------------------------------"
     echo "Access your site at: http://$domain"
-    echo "to complete the WordPress installation."
+    echo "to finish the browser setup."
     echo "------------------------------------------"
 }
 
@@ -250,6 +276,30 @@ create_mysql_db() {
     mysql -e "CREATE USER IF NOT EXISTS '$user'@'localhost' IDENTIFIED BY '$pass';"
     mysql -e "GRANT ALL PRIVILEGES ON $name.* TO '$user'@'localhost';"
     mysql -e "FLUSH PRIVILEGES;"
+}
+
+update_site_php() {
+    local domain=$1
+    local version=$2
+    local vhost="/etc/nginx/sites-available/$domain"
+
+    if [[ ! -f "$vhost" ]]; then
+        log_error "Domain $domain not found."
+        return 1
+    fi
+
+    # Check/Install PHP if not present
+    if [[ ! -d "/etc/php/$version" ]]; then
+        source "$SOTO_BASE_DIR/inc/stack.sh"
+        install_php "$version"
+    fi
+
+    log_info "Updating PHP version to $version in Nginx configuration..."
+    # Replace the phpX.X-fpm.sock line
+    sed -i "s/php[0-9.]\+-fpm.sock/php$version-fpm.sock/g" "$vhost"
+    
+    nginx -t && systemctl reload nginx
+    log_success "PHP version for $domain updated to $version."
 }
 
 delete_site() {
