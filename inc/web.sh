@@ -134,6 +134,13 @@ create_site() {
     mkdir -p "/var/www/$domain"
     chown -R www-data:www-data "/var/www/$domain"
 
+    # 1.1. Ensure PHP-FPM is healthy to prevent 502
+    local fpm_svc="php$php_ver-fpm"
+    if ! systemctl is-active --quiet "$fpm_svc"; then
+        log_warn "$fpm_svc is not running. Attempting to start..."
+        systemctl start "$fpm_svc"
+    fi
+
     # 2. Add PHP index file if not existing
     if [[ ! -f "/var/www/$domain/index.php" ]]; then
         echo "<?php phpinfo(); ?>" > "/var/www/$domain/index.php"
@@ -302,17 +309,17 @@ install_wordpress() {
     chown -R www-data:www-data "/var/www/$domain"
     
     # Download WP using /tmp for cache to avoid permissions issues
-    sudo -u www-data HOME=/tmp wp core download
+    sudo -u www-data HOME=/tmp WP_CLI_CACHE_DIR=/tmp wp core download --allow-root
     
-    # Create wp-config.php
-    sudo -u www-data HOME=/tmp wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass"
+    # Create wp-config.php (Nuclear fix for mysqli_init)
+    sudo -u www-data HOME=/tmp WP_CLI_CACHE_DIR=/tmp wp config create --dbname="$db_name" --dbuser="$db_user" --dbpass="$db_pass" --allow-root --skip-check
     
     # Enable per-site FastCGI Cache
     enable_cache "$domain"
 
     # Install and Activate Redis Object Cache Plugin
     log_info "Installing Redis Object Cache plugin..."
-    sudo -u www-data HOME=/tmp wp plugin install redis-cache --activate
+    sudo -u www-data HOME=/tmp WP_CLI_CACHE_DIR=/tmp wp plugin install redis-cache --activate --allow-root
     
     log_success "WordPress 'Ultra' ready for $domain!"
     echo "------------------------------------------"
@@ -331,13 +338,12 @@ check_wp_cli() {
     # Always force permissions even if it already exists
     chmod 755 /usr/local/bin/wp
     
-    # Proactive fix for missing extensions
+    # Proactive NUCLEAR fix for missing extensions
     if ! php -m | grep -q mysqli; then
-        log_info "Fixing missing PHP MySQL extension for CLI..."
-        local version=$(get_php_version)
-        if check_command phpenmod; then
-            phpenmod -v "$version" -s cli mysqli mysqlnd &> /dev/null
-        fi
+        log_info "Hardening PHP MySQL extension globally..."
+        apt-get install -y -qq php-mysql &> /dev/null
+        phpenmod -s cli mysqli mysqlnd &> /dev/null
+        phpenmod -s fpm mysqli mysqlnd &> /dev/null
     fi
 }
 
