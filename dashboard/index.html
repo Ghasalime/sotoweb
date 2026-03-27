@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SotoDash | Premium Server Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --secondary: #a855f7;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --success: #22c55e;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.15) 0px, transparent 50%);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--success);
+            padding: 0.5rem 1rem;
+            border-radius: 99px;
+            font-size: 0.875rem;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-title {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            width: 0%;
+            transition: width 1s ease-in-out;
+        }
+
+        .services-list {
+            list-style: none;
+        }
+
+        .service-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .service-item:last-child {
+            border-bottom: none;
+        }
+
+        .dot {
+            height: 8px;
+            width: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .dot.online { background-color: var(--success); box-shadow: 0 0 8px var(--success); }
+        .dot.offline { background-color: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+        .chart-container {
+            height: 200px;
+            position: relative;
+        }
+
+        footer {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-top: 4rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">SotoDash <span style="font-weight: 300; opacity: 0.7;">v1.0</span></div>
+            <div id="hostname" class="status-badge">Loading...</div>
+        </header>
+
+        <div class="grid">
+            <div class="card">
+                <div class="card-title">System Load</div>
+                <div id="load-val" class="card-value">0.00</div>
+                <div class="chart-container">
+                    <canvas id="loadChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">RAM Usage</div>
+                <div id="ram-val" class="card-value">0 / 0 MB</div>
+                <div class="progress-bar">
+                    <div id="ram-progress" class="progress-fill"></div>
+                </div>
+                <div style="margin-top: 1rem; color: var(--text-muted); font-size: 0.875rem;" id="ram-percent">0% used</div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Storage</div>
+                <div id="disk-val" class="card-value">0 / 0 GB</div>
+                <div class="progress-bar">
+                    <div id="disk-progress" class="progress-fill"></div>
+                </div>
+                <div style="margin-top: 1rem; color: var(--text-muted); font-size: 0.875rem;" id="disk-percent">0% used</div>
+            </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 1fr 2fr;">
+            <div class="card">
+                <div class="card-title">Services</div>
+                <ul id="services-list" class="services-list">
+                    <!-- Services will be injected here -->
+                </ul>
+            </div>
+            <div class="card">
+                <div class="card-title">Server Info</div>
+                <div style="display: flex; gap: 2rem;">
+                    <div>
+                        <p style="color: var(--text-muted); font-size: 0.875rem;">Uptime</p>
+                        <p id="uptime" style="font-weight: 600;">Loading...</p>
+                    </div>
+                    <div>
+                        <p style="color: var(--text-muted); font-size: 0.875rem;">Time</p>
+                        <p id="time" style="font-weight: 600;">--:--:--</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            &copy; 2024 SotoWeb • Premium LEMP CLI
+        </footer>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('loadChart').getContext('2d');
+        const loadChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array(10).fill(''),
+                datasets: [{
+                    label: 'Load',
+                    data: Array(10).fill(0),
+                    borderColor: '#6366f1',
+                    tension: 0.4,
+                    fill: true,
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { y: { display: false }, x: { display: false } }
+            }
+        });
+
+        async function updateStats() {
+            try {
+                const res = await fetch('stats.php');
+                const data = await res.json();
+
+                // Hostname & Uptime
+                document.getElementById('hostname').innerText = data.hostname;
+                document.getElementById('uptime').innerText = data.uptime;
+                document.getElementById('time').innerText = new Date().toLocaleTimeString();
+
+                // RAM
+                const ramUsed = data.mem[1];
+                const ramTotal = data.mem[0];
+                const ramPercent = Math.round((ramUsed / ramTotal) * 100);
+                document.getElementById('ram-val').innerText = `${ramUsed} / ${ramTotal} MB`;
+                document.getElementById('ram-progress').style.width = ramPercent + '%';
+                document.getElementById('ram-percent').innerText = ramPercent + '% used';
+
+                // Disk
+                const diskPercent = data.disk[2];
+                document.getElementById('disk-val').innerText = `${data.disk[1]} / ${data.disk[0]}`;
+                document.getElementById('disk-progress').style.width = diskPercent;
+                document.getElementById('disk-percent').innerText = diskPercent + ' used';
+
+                // Load
+                const currentLoad = data.load[0];
+                document.getElementById('load-val').innerText = currentLoad.toFixed(2);
+                loadChart.data.datasets[0].data.shift();
+                loadChart.data.datasets[0].data.push(currentLoad);
+                loadChart.update('none');
+
+                // Services
+                const servicesHtml = Object.entries(data.services).map(([name, status]) => `
+                    <li class="service-item">
+                        <span>${name.toUpperCase()}</span>
+                        <span><span class="dot ${status === 'active' ? 'online' : 'offline'}"></span> ${status}</span>
+                    </li>
+                `).join('');
+                document.getElementById('services-list').innerHTML = servicesHtml;
+
+            } catch (e) {
+                console.error("Failed to fetch stats", e);
+            }
+        }
+
+        setInterval(updateStats, 2000);
+        updateStats();
+    </script>
+</body>
+</html>

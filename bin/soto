@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# SotoWeb - Premium LEMP CLI
+# Author: Antigravity
+
+# Set the base directory of the script
+SOTO_BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Include core functions
+source "$SOTO_BASE_DIR/inc/core.sh"
+
+# Main Help
+show_help() {
+    display_banner
+    echo "Usage: soto <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  stack    Install and manage LEMP components (Nginx, MariaDB, PHP)"
+    echo "  web      Manage websites (WordPress, PHP, Static)"
+    echo "  log      View real-time server logs"
+    echo "  backup   Manage cloud backups (S3, GDrive, etc.)"
+    echo "  tools    SotoWeb system tools & dashboard"
+    echo "  help     Display this help menu"
+    echo ""
+    echo "Example:"
+    echo "  sudo soto stack -install"
+    echo "  sudo soto web example.com -wp"
+    echo ""
+}
+
+# Command Routing
+case "$1" in
+    stack)
+        source "$SOTO_BASE_DIR/inc/stack.sh"
+        shift
+        handle_stack "$@"
+        ;;
+    web)
+        source "$SOTO_BASE_DIR/inc/web.sh"
+        shift
+        handle_web "$@"
+        ;;
+    log)
+        source "$SOTO_BASE_DIR/inc/log.sh"
+        shift
+        handle_log "$@"
+        ;;
+    backup)
+        source "$SOTO_BASE_DIR/inc/backup.sh"
+        shift
+        handle_backup "$@"
+        ;;
+    tools)
+        source "$SOTO_BASE_DIR/inc/tools.sh"
+        shift
+        handle_tools "$@"
+        ;;
+    auth)
+        source "$SOTO_BASE_DIR/inc/auth.sh"
+        shift
+        handle_auth "$@"
+        ;;
+    help|--help|-h|"")
+        show_help
+        ;;
+    *)
+        log_error "Unknown command: $1. See 'soto help'."
+        exit 1
+        ;;
+esac
