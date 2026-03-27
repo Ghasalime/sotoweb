@@ -38,7 +38,9 @@ fi
 chmod +x "$INSTALL_PATH/bin/soto"
 
 # 5. Symlink to /usr/local/bin
-ln -sf "$INSTALL_PATH/bin/soto" /usr/local/bin/soto
+# 6. Automatic LEMP Stack Installation
+echo -e "${BLUE}>>> Installing LEMP Stack (Nginx, MariaDB, PHP 8.3)...${NC}"
+soto stack -install
 
 if [[ $? -eq 0 ]]; then
     echo -e "${GREEN}>>> SotoWeb has been installed successfully!${NC}"

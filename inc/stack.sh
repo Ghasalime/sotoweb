@@ -72,6 +72,9 @@ install_lemp() {
     log_info "Installing MariaDB..."
     install_mysql
 
+    # Ensure Nginx directories are ready
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/conf.d
+
     log_info "Installing PHP (Default: 8.3)..."
     install_php "8.3"
 
@@ -125,6 +128,7 @@ tune_server() {
     # Usually in /etc/mysql/mariadb.conf.d/50-server.cnf
     # We might need to add it if it doesn't exist
     local mysql_conf="/etc/mysql/mariadb.conf.d/soto-tuning.cnf"
+    mkdir -p "$(dirname "$mysql_conf")"
     echo -e "[mysqld]\ninnodb_buffer_pool_size = ${db_buffer_pool_size}M" > "$mysql_conf"
     systemctl restart mariadb
 

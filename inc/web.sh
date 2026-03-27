@@ -10,6 +10,12 @@ handle_web() {
     DOMAIN="$1"
     OPTION="$2"
 
+    # Pre-check: Ensure Nginx is installed
+    if ! command -v nginx &> /dev/null; then
+        log_error "Nginx is not installed. Please run 'sudo soto stack -install' first."
+        return 1
+    fi
+
     if [[ -z "$DOMAIN" ]]; then
         echo "Usage: soto web [domain] -[option]"
         echo "Options:"
@@ -260,10 +266,10 @@ install_wordpress() {
 
 check_wp_cli() {
     if ! check_command wp; then
-        log_info "Installing WP-CLI..."
         curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
         chmod +x wp-cli.phar
         mv wp-cli.phar /usr/local/bin/wp
+        chmod 755 /usr/local/bin/wp
     fi
 }
 
@@ -272,10 +278,10 @@ create_mysql_db() {
     local user=$2
     local pass=$3
     
-    mysql -e "CREATE DATABASE IF NOT EXISTS $name;"
-    mysql -e "CREATE USER IF NOT EXISTS '$user'@'localhost' IDENTIFIED BY '$pass';"
-    mysql -e "GRANT ALL PRIVILEGES ON $name.* TO '$user'@'localhost';"
-    mysql -e "FLUSH PRIVILEGES;"
+    mariadb -e "CREATE DATABASE IF NOT EXISTS $name;"
+    mariadb -e "CREATE USER IF NOT EXISTS '$user'@'localhost' IDENTIFIED BY '$pass';"
+    mariadb -e "GRANT ALL PRIVILEGES ON $name.* TO '$user'@'localhost';"
+    mariadb -e "FLUSH PRIVILEGES;"
 }
 
 update_site_php() {
