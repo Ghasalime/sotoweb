@@ -83,6 +83,10 @@ SotoWeb automatically configures the best stack for WordPress:
 
 #### 3. Developer Flexibility
 - **Multi-PHP Version**: Run multiple PHP versions (8.4, 8.3, 8.2, etc.) on the same server.
+#### 2. Multi-PHP Support per Site
+Switch PHP versions without affecting other sites. Default installation uses the latest stable **PHP 8.4**.
+- `sudo soto web domain.com -php=8.4` : Use the high-performance standard version.
+- `sudo soto web domain.com -php=8.1` : Supports custom versioning if required.
 - **Reverse Proxy Support**: Connect your domain to modern apps (Node.js, Docker, etc.).
 - **DB Import/Export**: Manage your databases directly from the command line.
 

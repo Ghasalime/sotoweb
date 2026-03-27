@@ -112,6 +112,8 @@ handle_web() {
             import_site_db "$DOMAIN" "$sql_file"
             ;;
         -info)
+            site_info "$DOMAIN"
+            ;;
         -delete)
             log_warn "Deleting site $DOMAIN..."
             delete_site "$DOMAIN"
