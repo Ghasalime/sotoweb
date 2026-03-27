@@ -61,6 +61,10 @@ handle_stack() {
             log_info "Cleaning up conflicting repositories..."
             clean_ppa
             ;;
+        -purge)
+            log_info "Purging all stack components for clean install..."
+            purge_stack
+            ;;
         *)
             log_error "Unknown stack option: $1"
             ;;
@@ -68,11 +72,15 @@ handle_stack() {
 }
 
 install_lemp() {
+    # 0. Nuclear Purge & Deep Clean
+    purge_stack
+    clean_ppa
+
     log_info "Updating system repositories..."
     apt update -qq
     
     log_info "Installing common dependencies..."
-    apt install -y -qq software-properties-common curl git unzip
+    apt install -y software-properties-common curl git unzip
 
     log_info "Installing Nginx..."
     apt install -y nginx
@@ -213,6 +221,23 @@ fix_stack() {
         mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/conf.d
         log_success "Nginx files restored."
     fi
+}
+
+purge_stack() {
+    log_warn "Purging all Nginx and PHP version packages for a fresh start..."
+    # 1. Stop services
+    systemctl stop nginx php*-fpm 2>/dev/null
+    
+    # 2. Purge packages
+    apt purge -y "nginx*" "php*" "libnginx-mod-*" "mariadb-server*" "mariadb-client*" 2>/dev/null
+    
+    # 3. Autoremove leftover dependencies
+    apt autoremove -y -qq
+    
+    # 4. Remove directories
+    rm -rf /etc/nginx /etc/php /var/www/html /var/lib/mysql /var/log/nginx /var/log/mysql
+    
+    log_success "System purged of existing stack components."
 }
 
 clean_ppa() {
